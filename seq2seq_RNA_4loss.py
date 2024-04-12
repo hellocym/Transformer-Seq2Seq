@@ -130,7 +130,7 @@ wandb.init(
         "dataset": "RNA",
         "epochs": NUM_EPOCHS,
         "optimizer": 'Adam',
-        'cost_function': '0.5*Forward+0.5*Backward'
+        'cost_function': '0.25*Forward+0.25*Backward+0.25*self_domain1+0.25*self_domain2'
     }
 )
 
@@ -238,8 +238,9 @@ class Seq2SeqTransformer(nn.Module):
                                               None,
                                               src_padding_mask1, tgt_padding_mask1, memory_key_padding_mask1,
                                               src_padding_mask2, tgt_padding_mask2, memory_key_padding_mask2)
-
-        return h1, h2, self.generator1(out1), self.generator2(out2)
+        out3 = self.decode2(trg2, self.encode1(src1, src_mask1), tgt_mask2)
+        out4 = self.decode1(trg1, self.encode2(src2, src_mask2), tgt_mask1)
+        return h1, h2, self.generator1(out1), self.generator2(out2), self.generator2(out3), self.generator1(out4)
 
     def encode1(self, src: Tensor, src_mask: Tensor):
         return self.transformer.encoder1(self.positional_encoding(
@@ -321,7 +322,7 @@ def train_epoch(model, optimizer):
         src_mask2, tgt_mask2, src_padding_mask2, tgt_padding_mask2 = create_mask(
             tgt, src_input)
 
-        h1, h2, logits1, logits2 = model(src, tgt_input, tgt, src_input,
+        h1, h2, logits1, logits2, logits3, logits4 = model(src, tgt_input, tgt, src_input,
                                          src_mask1, tgt_mask1, src_mask2, tgt_mask2,
                                          src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
                                          src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
@@ -335,6 +336,7 @@ def train_epoch(model, optimizer):
             logits1.reshape(-1, logits1.shape[-1]), tgt_out1.reshape(-1))
         loss2 = loss_fn(
             logits2.reshape(-1, logits2.shape[-1]), tgt_out2.reshape(-1))
+        loss3 = 
         # loss3 = mse_loss(h1, h2)
         loss = (loss1 + loss2) / 2
         loss.backward()
