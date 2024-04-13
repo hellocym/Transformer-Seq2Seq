@@ -385,6 +385,7 @@ def evaluate(model):
     return losses / len(list(val_loader))
 
 
+best_val_loss = 1e9
 for epoch in range(1, NUM_EPOCHS+1):
     start_time = timer()
     train_loss = train_epoch(transformer, optimizer)
@@ -394,4 +395,7 @@ for epoch in range(1, NUM_EPOCHS+1):
     print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
     wandb.log({'train_loss': train_loss, 'val_loss': val_loss,
               'epoch_time': end_time - start_time})
-    torch.save(transformer, f'checkpoints/Epoch{epoch}.pth')
+    if val_loss < best_val_loss:
+        torch.save(transformer, os.path.join(
+            wandb.run.dir, f"Epoch{epoch}.pth"))
+        best_val_loss = val_loss

@@ -10,6 +10,7 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from torchtext.datasets import multi30k, Multi30k
 from typing import Iterable, List
+import torch.nn.functional as F
 
 
 import pandas as pd
@@ -109,6 +110,7 @@ TGT_VOCAB_SIZE = 256
 EMB_SIZE = 512
 NHEAD = 8
 FFN_HID_DIM = 512
+HID_LEN = 10
 BATCH_SIZE = 128
 NUM_ENCODER_LAYERS = 3
 NUM_DECODER_LAYERS = 3
@@ -122,6 +124,8 @@ wandb.init(
     # track hyperparameters and run metadata
     config={
         "embedding_size": EMB_SIZE,
+        "feed_forward_hidden_size": FFN_HID_DIM,
+        "hidden_state_length": HID_LEN,
         "batch_size": BATCH_SIZE,
         "transformer_encoder_layers": NUM_ENCODER_LAYERS,
         "transformer_decoder_layer": NUM_DECODER_LAYERS,
@@ -130,7 +134,7 @@ wandb.init(
         "dataset": "RNA",
         "epochs": NUM_EPOCHS,
         "optimizer": 'Adam',
-        'cost_function': '0.25*Forward+0.25*Backward+0.25*self_domain1+0.25*self_domain2'
+        'cost_function': '0.33*Forward+0.33*Backward+0.33*Hidden'
     }
 )
 
@@ -238,9 +242,8 @@ class Seq2SeqTransformer(nn.Module):
                                               None,
                                               src_padding_mask1, tgt_padding_mask1, memory_key_padding_mask1,
                                               src_padding_mask2, tgt_padding_mask2, memory_key_padding_mask2)
-        out3 = self.decode2(trg2, self.encode1(src1, src_mask1), tgt_mask2)
-        out4 = self.decode1(trg1, self.encode2(src2, src_mask2), tgt_mask1)
-        return h1, h2, self.generator1(out1), self.generator2(out2), self.generator2(out3), self.generator1(out4)
+
+        return h1, h2, self.generator1(out1), self.generator2(out2)
 
     def encode1(self, src: Tensor, src_mask: Tensor):
         return self.transformer.encoder1(self.positional_encoding(
@@ -279,6 +282,37 @@ def create_mask(src, tgt):
     src_padding_mask = (src == PAD_IDX).transpose(0, 1)
     tgt_padding_mask = (tgt == PAD_IDX).transpose(0, 1)
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
+
+
+def LT(x, target_length, sigma=1.0):
+    # x is expected to have shape (length, batch, dim)
+    length, batch, dim = x.shape
+
+    # Creating the squared distance matrix for a range of indices
+    j = torch.arange(target_length).unsqueeze(1).repeat(
+        1, length)   # Shape: (target_length, length)
+    k = torch.arange(length).unsqueeze(0).repeat(
+        target_length, 1)  # Shape: (target_length, length)
+    # Shape: (target_length, length)
+    squared_distance = -((k - j)**2) / (2 * sigma**2)
+
+    # Broadcasting squared_distance across batch dimension
+    # Shape: (target_length, length, batch)
+    a = squared_distance.unsqueeze(2).repeat(1, 1, batch).to(DEVICE)
+
+    # Softmax across the 'length' dimension
+    w = F.softmax(a, dim=1)
+
+    # Re-arranging x to perform batched matrix multiplication: (batch, dim, length)
+    x_perm = x.permute(1, 2, 0)
+
+    # Matrix multiplication along the specified dimensions: (batch, dim, target_length)
+    z = torch.bmm(x_perm, w.permute(2, 1, 0))
+
+    # Re-arrange back to the desired output shape: (target_length, batch, dim)
+    z = z.permute(2, 0, 1)
+
+    return z
 
 
 torch.manual_seed(0)
@@ -322,10 +356,10 @@ def train_epoch(model, optimizer):
         src_mask2, tgt_mask2, src_padding_mask2, tgt_padding_mask2 = create_mask(
             tgt, src_input)
 
-        h1, h2, logits1, logits2, logits3, logits4 = model(src, tgt_input, tgt, src_input,
-                                                           src_mask1, tgt_mask1, src_mask2, tgt_mask2,
-                                                           src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
-                                                           src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
+        h1, h2, logits1, logits2 = model(src, tgt_input, tgt, src_input,
+                                         src_mask1, tgt_mask1, src_mask2, tgt_mask2,
+                                         src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
+                                         src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
 
         optimizer.zero_grad()
 
@@ -336,12 +370,11 @@ def train_epoch(model, optimizer):
             logits1.reshape(-1, logits1.shape[-1]), tgt_out1.reshape(-1))
         loss2 = loss_fn(
             logits2.reshape(-1, logits2.shape[-1]), tgt_out2.reshape(-1))
-        loss3 = loss_fn(
-            logits3.reshape(-1, logits3.shape[-1]), tgt_out2.reshape(-1))
-        loss4 = loss_fn(
-            logits4.reshape(-1, logits4.shape[-1]), tgt_out1.reshape(-1))
+        loss3 = mse_loss(LT(h1, target_length=HID_LEN),
+                         LT(h2, target_length=HID_LEN))
         # loss3 = mse_loss(h1, h2)
-        loss = (loss1 + loss2 + loss3 + loss4) / 4
+        wandb.log({"train_loss_hidden": loss3})
+        loss = (loss1 + loss2 + loss3) / 3
         loss.backward()
 
         optimizer.step()
@@ -368,10 +401,10 @@ def evaluate(model):
         src_mask2, tgt_mask2, src_padding_mask2, tgt_padding_mask2 = create_mask(
             tgt, src_input)
 
-        h1, h2, logits1, logits2, logits3, logits4 = model(src, tgt_input, tgt, src_input,
-                                                           src_mask1, tgt_mask1, src_mask2, tgt_mask2,
-                                                           src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
-                                                           src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
+        h1, h2, logits1, logits2 = model(src, tgt_input, tgt, src_input,
+                                         src_mask1, tgt_mask1, src_mask2, tgt_mask2,
+                                         src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
+                                         src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
 
         # print(h1.shape, h2.shape)
 
@@ -382,7 +415,6 @@ def evaluate(model):
             logits1.reshape(-1, logits1.shape[-1]), tgt_out1.reshape(-1))
         loss2 = loss_fn(
             logits2.reshape(-1, logits2.shape[-1]), tgt_out2.reshape(-1))
-        # loss3 = mse_loss(h1, h2)
         loss = (loss1 + loss2) / 2
         wandb.log({"val_loss_forward": loss1, "val_loss_reverse": loss2})
         losses += loss.item()
@@ -404,4 +436,3 @@ for epoch in range(1, NUM_EPOCHS+1):
         torch.save(transformer, os.path.join(
             wandb.run.dir, f"Epoch{epoch}.pth"))
         best_val_loss = val_loss
-    # torch.save(transformer, f'checkpoints_/Epoch{epoch}.pth')
