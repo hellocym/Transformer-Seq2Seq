@@ -1,101 +1,75 @@
-import torch
-import torch.nn as nn
-# import pytorch_lightning as pl
-from utils import PositionalEncoding, generate_square_subsequent_mask
+from torch import nn
+from torch import Tensor
+from models.transformer_pytorch import Transformer
+from utils.utils import PositionalEncoding, TokenEmbedding
 
 
-class transformerEncoderDecoder(nn.Module):
-    '''
-    Full Transformer
-    '''
+class Seq2SeqTransformer(nn.Module):
+    def __init__(self,
+                 num_encoder_layers: int,
+                 num_decoder_layers: int,
+                 emb_size: int,
+                 nhead: int,
+                 src_vocab_size: int,
+                 tgt_vocab_size: int,
+                 dim_feedforward: int = 512,
+                 dropout: float = 0.1):
+        super(Seq2SeqTransformer, self).__init__()
+        self.transformer = Transformer(d_model=emb_size,
+                                       nhead=nhead,
+                                       num_encoder_layers=num_encoder_layers,
+                                       num_decoder_layers=num_decoder_layers,
+                                       dim_feedforward=dim_feedforward,
+                                       dropout=dropout)
+        self.generator1 = nn.Linear(emb_size, tgt_vocab_size)
+        self.generator2 = nn.Linear(emb_size, src_vocab_size)
+        self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
+        self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
+        self.positional_encoding = PositionalEncoding(
+            emb_size, dropout=dropout)
 
-    def __init__(self, input_size, output_size, n_features, d_model=256, nhead=8, num_layers=3, dropout=0.1):
-        super(transformerEncoderDecoder, self).__init__()
+    def forward(self,
+                src1: Tensor,
+                trg1: Tensor,
+                src2: Tensor,
+                trg2: Tensor,
+                src_mask1: Tensor,
+                tgt_mask1: Tensor,
+                src_mask2: Tensor,
+                tgt_mask2: Tensor,
+                src_padding_mask1: Tensor,
+                tgt_padding_mask1: Tensor,
+                memory_key_padding_mask1: Tensor,
+                src_padding_mask2: Tensor,
+                tgt_padding_mask2: Tensor,
+                memory_key_padding_mask2: Tensor):
 
-        self.d_model = d_model
-        self.criterion = nn.L1Loss()
-        self.warmup_steps = 4000
+        src_emb1 = self.positional_encoding(self.src_tok_emb(src1))
+        tgt_emb1 = self.positional_encoding(self.tgt_tok_emb(trg1))
+        src_emb2 = self.positional_encoding(self.tgt_tok_emb(src2))
+        tgt_emb2 = self.positional_encoding(self.src_tok_emb(trg2))
+        h1, h2, out1, out2 = self.transformer(src_emb1, tgt_emb1, src_emb2, tgt_emb2,
+                                              src_mask1, tgt_mask1, src_mask2, tgt_mask2,
+                                              None,
+                                              src_padding_mask1, tgt_padding_mask1, memory_key_padding_mask1,
+                                              src_padding_mask2, tgt_padding_mask2, memory_key_padding_mask2)
 
-        self.encoder = nn.Linear(input_size, d_model)
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        return h1, h2, self.generator1(out1), self.generator2(out2)
 
-        self.decoder = nn.Linear(output_size, d_model)
-        self.pos_decoder = PositionalEncoding(d_model, dropout)
+    def encode1(self, src: Tensor, src_mask: Tensor):
+        return self.transformer.encoder1(self.positional_encoding(
+            self.src_tok_emb(src)), src_mask)
 
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, dropout=dropout, activation='relu')
-        self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layer, num_layers=num_layers)
+    def decode1(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
+        return self.transformer.decoder1(self.positional_encoding(
+            self.tgt_tok_emb(tgt)), memory,
+            tgt_mask)
 
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, dropout=dropout, activation='relu')
-        self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, num_layers=num_layers)
-        self.fc_out = nn.Linear(d_model, output_size)
+    def encode2(self, src: Tensor, src_mask: Tensor):
+        return self.transformer.encoder2(self.positional_encoding(
+            self.tgt_tok_emb(src)), src_mask)
 
-        self.src_mask = None
-        self.trg_mask = None
-        self.memory_mask = None
-
-    def forward(self, src, trg):
-
-        src = src.permute(1, 0, 2)
-        print(src)
-        trg = trg.permute(1, 0, 2)
-
-        if self.trg_mask is None or self.trg_mask.size(0) != len(trg):
-            self.trg_mask = generate_square_subsequent_mask(
-                len(trg)).to(trg.device)
-
-        src = self.encoder(src)
-        src = self.pos_encoder(src)
-
-        trg = self.decoder(trg)
-        trg = self.pos_decoder(trg)
-
-        memory = self.transformer_encoder(src, self.src_mask)
-
-        output = self.transformer_decoder(
-            trg, memory, tgt_mask=self.trg_mask, memory_mask=self.src_mask)
-        output = self.fc_out(output)
-
-        return output.permute(1, 0, 2)
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        y = torch.cat((x[:, -1, :].unsqueeze(1), y), 1)
-
-        y_hat = self(x, y[:, :-1])
-        loss = self.criterion(y_hat, y[:, 1:])
-        self.log("train_loss", loss, on_epoch=True, logger=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        decoderInput = x[:, -1].unsqueeze(-1)
-        for i in range(0, self.output_size):
-            out = self(x, decoderInput)
-            decoderInput = torch.cat(
-                (decoderInput, out[:, -1].unsqueeze(-1).detach()), 1)
-
-        y_hat = decoderInput[:, 1:]
-        loss = self.criterion(y_hat, y)
-        self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True)
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            self.parameters(), betas=(0.9, 0.98), eps=1e-9)
-        return optimizer
-
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, optimizer_closure,
-                       on_tpu=False, using_native_amp=False, using_lbfgs=False):
-
-        d_model, steps, warmup_steps = self.d_model, self.global_step + 1, self.warmup_steps
-        rate = (d_model ** (- 0.5)) * min(steps **
-                                          (- 0.5), steps * warmup_steps ** (- 1.5))
-
-        for pg in optimizer.param_groups:
-            pg['lr'] = rate
-
-        optimizer.step(closure=optimizer_closure)
+    def decode2(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
+        return self.transformer.decoder2(self.positional_encoding(
+            self.src_tok_emb(tgt)), memory,
+            tgt_mask)
