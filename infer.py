@@ -51,7 +51,7 @@ def infer(model, src_sequence, direction=1):
     src_sequence = [ord(c) for c in src_sequence]
     src = torch.tensor([BOS_IDX] + src_sequence,
                        dtype=torch.long).to(DEVICE).view(-1, 1)
-    print(src.shape)
+    # print(src.shape)
     num_tokens = src.shape[0]
     src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
 
