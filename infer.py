@@ -3,15 +3,14 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from models.transformer import Seq2SeqTransformer
-from utils.utils import generate_square_subsequent_mask
-from utils.utils import PositionalEncoding, TokenEmbedding
+from utils.utils import *
 
 
-# Define special symbols and indices
-UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
-# Make sure the tokens are in order of their indices to properly insert them in vocab
-special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# # Define special symbols and indices
+# UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
+# # Make sure the tokens are in order of their indices to properly insert them in vocab
+# special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
+# DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # function to generate output sequence using greedy algorithm
@@ -42,6 +41,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol, direction=1):
         ys = torch.cat([ys,
                         torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=0)
         if next_word == EOS_IDX:
+            # print('hitting end of seq mark.')
             break
     return ys
 
@@ -49,14 +49,14 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol, direction=1):
 def infer(model, src_sequence, direction=1):
     model.eval()
     src_sequence = [ord(c) for c in src_sequence]
-    src = torch.tensor([BOS_IDX] + src_sequence,
+    src = torch.tensor([BOS_IDX] + src_sequence + [EOS_IDX],
                        dtype=torch.long).to(DEVICE).view(-1, 1)
     # print(src.shape)
     num_tokens = src.shape[0]
     src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
 
     tgt_tokens = greedy_decode(
-        model, src, src_mask, max_len=num_tokens + 5, start_symbol=BOS_IDX, direction=direction).flatten()
+        model, src, src_mask, max_len=100, start_symbol=BOS_IDX, direction=direction).flatten()
 
     print(tgt_tokens)
 

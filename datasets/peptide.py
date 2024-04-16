@@ -1,3 +1,10 @@
+from torch.utils.data import Dataset, DataLoader
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from utils.utils import *
+from torch.nn.utils.rnn import pad_sequence
+
+
 class PeptideDataset(Dataset):
     def __init__(self, files, split='train', transform=None):
         # 初始为空的列表，用于存储各个分割的数据
@@ -44,3 +51,23 @@ class PeptideDataset(Dataset):
             column1 = self.transform(column1)
             column2 = self.transform(column2)
         return (column1, column2)
+
+
+def collate_fn(batch):
+    pad_token = PAD_IDX
+    bos_token = BOS_IDX
+    eos_token = EOS_IDX
+
+    # 处理batch中的每个样本，样本是(column1, column2)的形式
+    batch_column1 = [torch.tensor([bos_token] + item[0] + [eos_token])
+                     for item in batch]  # 对第一列应用转换
+    batch_column2 = [torch.tensor([bos_token] + item[1] + [eos_token])
+                     for item in batch]  # 对第二列应用转换
+
+    # 对两列数据进行padding
+    column1_padded = pad_sequence([torch.tensor(x) for x in batch_column1],
+                                  padding_value=pad_token, batch_first=True)
+    column2_padded = pad_sequence([torch.tensor(x) for x in batch_column2],
+                                  padding_value=pad_token, batch_first=True)
+
+    return column1_padded.T, column2_padded.T

@@ -2,9 +2,21 @@ import torch
 from torch import nn
 from torch import Tensor
 import math
+import torch.nn.functional as F
 
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Define special symbols and indices
+UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
+# Make sure the tokens are in order of their indices to properly insert them in vocab
+special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
+
+
+def text_transform(text):
+    bos_token = 2
+    # 首先将文本转换为字符的ascii值列表
+    transformed_text = [ord(char) for char in text]
+    return transformed_text
 
 
 class PositionalEncoding(nn.Module):
