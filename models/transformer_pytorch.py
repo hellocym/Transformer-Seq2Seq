@@ -837,7 +837,6 @@ class TransformerDecoderLayer(Module):
             see the docs in Transformer class.
         """
         # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
-
         x = tgt
         if self.norm_first:
             x = x + self._sa_block(self.norm1(x), tgt_mask,
@@ -858,21 +857,21 @@ class TransformerDecoderLayer(Module):
 
     def _sa_block(self, x: Tensor,
                   attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor], is_causal: bool = False) -> Tensor:
-        x = self.self_attn(x, x, x,
-                           attn_mask=attn_mask,
-                           key_padding_mask=key_padding_mask,
-                           is_causal=is_causal,
-                           need_weights=False)[0]
+        x, _ = self.self_attn(x, x, x,
+                              attn_mask=attn_mask,
+                              key_padding_mask=key_padding_mask,
+                              is_causal=is_causal,
+                              need_weights=True)
         return self.dropout1(x)
 
     # multihead attention block
     def _mha_block(self, x: Tensor, mem: Tensor,
                    attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor], is_causal: bool = False) -> Tensor:
-        x = self.multihead_attn(x, mem, mem,
-                                attn_mask=attn_mask,
-                                key_padding_mask=key_padding_mask,
-                                is_causal=is_causal,
-                                need_weights=False)[0]
+        x, _ = self.multihead_attn(x, mem, mem,
+                                   attn_mask=attn_mask,
+                                   key_padding_mask=key_padding_mask,
+                                   is_causal=is_causal,
+                                   need_weights=True)
         return self.dropout2(x)
 
     # feed forward block

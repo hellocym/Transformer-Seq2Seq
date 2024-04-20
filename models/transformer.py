@@ -20,7 +20,8 @@ class Seq2SeqTransformer(nn.Module):
                                        num_encoder_layers=num_encoder_layers,
                                        num_decoder_layers=num_decoder_layers,
                                        dim_feedforward=dim_feedforward,
-                                       dropout=dropout)
+                                       dropout=dropout,
+                                       output_attentions=True)
         self.generator1 = nn.Linear(emb_size, tgt_vocab_size)
         self.generator2 = nn.Linear(emb_size, src_vocab_size)
         self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)

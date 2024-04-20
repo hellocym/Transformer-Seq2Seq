@@ -4,13 +4,6 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 from models.transformer import Seq2SeqTransformer
 from utils.utils import *
-from datasets.peptide import collate_fn
-
-# # Define special symbols and indices
-# UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
-# # Make sure the tokens are in order of their indices to properly insert them in vocab
-# special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
-# DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # function to generate output sequence using greedy algorithm
@@ -70,8 +63,8 @@ def main():
                         help='Input sequence for inference')
     parser.add_argument('--model_path', type=str, required=True,
                         help='Path to model')
-    parser.add_argument('--direction', type=int, default=2,
-                        help='Direction of inference: 1:HLA->peptide, 2:peptide->HLA')
+    parser.add_argument('--direction', type=int, default=1,
+                        help='Direction of inference: 1 for encode1-decode1, 2 for encode2-decode2')
     args = parser.parse_args()
 
     # 假设 transformer 已被加载并准备好
@@ -84,4 +77,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()  # 1:HLA->peptide
+    main()
