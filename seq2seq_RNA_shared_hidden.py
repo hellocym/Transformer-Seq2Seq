@@ -62,7 +62,7 @@ wandb.init(
         "dataset": "RNA",
         "epochs": NUM_EPOCHS,
         "optimizer": 'Adam',
-        'cost_function': '0.33*Forward+0.33*Backward+0.33*Hidden'
+        'cost_function': '0.2*Forward+0.2*Backward+0.2*Cycle1+0.2*Cycle2+0.2*Hidden'
     }
 )
 
@@ -116,10 +116,10 @@ def train_epoch(model, optimizer):
         src_mask2, tgt_mask2, src_padding_mask2, tgt_padding_mask2 = create_mask(
             tgt, src_input)
 
-        h1, h2, logits1, logits2 = model(src, tgt_input, tgt, src_input,
-                                         src_mask1, tgt_mask1, src_mask2, tgt_mask2,
-                                         src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
-                                         src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
+        h1, h2, logits1, logits2, logits3, logits4 = model(src, tgt_input, tgt, src_input,
+                                                           src_mask1, tgt_mask1, src_mask2, tgt_mask2,
+                                                           src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
+                                                           src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
 
         optimizer.zero_grad()
 
@@ -130,11 +130,15 @@ def train_epoch(model, optimizer):
             logits1.reshape(-1, logits1.shape[-1]), tgt_out1.reshape(-1))
         loss2 = loss_fn(
             logits2.reshape(-1, logits2.shape[-1]), tgt_out2.reshape(-1))
-        loss3 = mse_loss(LT(h1, target_length=HID_LEN),
+        loss3 = loss_fn(
+            logits3.reshape(-1, logits3.shape[-1]), tgt_out2.reshape(-1))
+        loss4 = loss_fn(
+            logits4.reshape(-1, logits4.shape[-1]), tgt_out1.reshape(-1))
+        loss5 = mse_loss(LT(h1, target_length=HID_LEN),
                          LT(h2, target_length=HID_LEN))
         # loss3 = mse_loss(h1, h2)
-        wandb.log({"train_loss_hidden": loss3})
-        loss = (loss1 + loss2 + loss3) / 3
+        wandb.log({"train_loss_hidden": loss5})
+        loss = (loss1 + loss2 + loss3 + loss4 + loss5) / 5
         loss.backward()
 
         optimizer.step()
