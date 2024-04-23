@@ -95,7 +95,7 @@ class Transformer(Module):
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
                  custom_encoder: Optional[Any] = None, custom_decoder: Optional[Any] = None,
                  layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
-                 bias: bool = True, device=None, dtype=None) -> None:
+                 bias: bool = True, device=None, dtype=None, output_attentions=False) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
         torch._C._log_api_usage_once(
@@ -131,6 +131,7 @@ class Transformer(Module):
         self.nhead = nhead
 
         self.batch_first = batch_first
+        self.output_attentions = output_attentions
 
     def forward(self, src1: Tensor, tgt1: Tensor, src2: Tensor, tgt2: Tensor,
                 src_mask1: Optional[Tensor] = None, tgt_mask1: Optional[Tensor] = None,

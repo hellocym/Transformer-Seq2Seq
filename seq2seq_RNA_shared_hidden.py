@@ -26,7 +26,7 @@ from datasets.peptide import PeptideDataset
 
 
 # 创建数据集实例
-root = 'data'
+root = '/data/Transformer-Seq2Seq/data'
 files = [os.path.join(root, f) for f in os.listdir(root) if f.endswith('csv')]
 train_dataset = PeptideDataset(files, split='train', transform=text_transform)
 val_dataset = PeptideDataset(files, split='val', transform=text_transform)
@@ -165,10 +165,10 @@ def evaluate(model):
         src_mask2, tgt_mask2, src_padding_mask2, tgt_padding_mask2 = create_mask(
             tgt, src_input)
 
-        h1, h2, logits1, logits2 = model(src, tgt_input, tgt, src_input,
-                                         src_mask1, tgt_mask1, src_mask2, tgt_mask2,
-                                         src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
-                                         src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
+        h1, h2, logits1, logits2, _, _ = model(src, tgt_input, tgt, src_input,
+                                               src_mask1, tgt_mask1, src_mask2, tgt_mask2,
+                                               src_padding_mask1, tgt_padding_mask1, src_padding_mask1,
+                                               src_padding_mask2, tgt_padding_mask2, src_padding_mask2)
 
         # print(h1.shape, h2.shape)
 
