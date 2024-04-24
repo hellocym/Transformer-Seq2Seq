@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from utils.utils import *
 from torch.nn.utils.rnn import pad_sequence
+import torch
 
 
 class PeptideDataset(Dataset):
@@ -118,7 +119,6 @@ class ClassificationDataset(Dataset):
         if self.transform:
             column1 = self.transform(column1)
             column2 = self.transform(column2)
-            column3 = self.transform(column2)
         return (column1, column2, column3)
 
 
@@ -138,5 +138,7 @@ def collate_fn_classification(batch):
                                   padding_value=pad_token, batch_first=True)
     column2_padded = pad_sequence([torch.tensor(x) for x in batch_column2],
                                   padding_value=pad_token, batch_first=True)
-
+    y = [triplet[2] for triplet in batch]
+    y = torch.tensor(y, dtype=torch.float)
+    # print(batch)
     return column1_padded.T, column2_padded.T, y

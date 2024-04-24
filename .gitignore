@@ -164,5 +164,6 @@ cython_debug/
 **/checkpoints
 **/wandb/
 **/*chb*
-*chb*.*
-.csv
+*chb*.* 
+**/*.csv
+**/*.pth
