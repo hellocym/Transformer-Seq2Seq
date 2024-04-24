@@ -19,19 +19,25 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 import os
 import wandb
+import argparse
 
 
 from utils.utils import *
 from datasets.peptide import PeptideDataset
 
+# import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 
 # 创建数据集实例
 root = '/data/Transformer-Seq2Seq/data'
-files = [os.path.join(root, f) for f in os.listdir(root) if f.endswith('csv')]
-train_dataset = PeptideDataset(files, split='train', transform=text_transform)
+files = [os.path.join(root, f)
+         for f in os.listdir(root) if f.endswith('csv')]
+train_dataset = PeptideDataset(
+    files, split='train', transform=text_transform)
 val_dataset = PeptideDataset(files, split='val', transform=text_transform)
-test_dataset = PeptideDataset(files, split='test', transform=text_transform)
-
+test_dataset = PeptideDataset(
+    files, split='test', transform=text_transform)
 
 SRC_VOCAB_SIZE = 256
 TGT_VOCAB_SIZE = 256
@@ -65,7 +71,6 @@ wandb.init(
         'cost_function': '0.2*Forward+0.2*Backward+0.2*Cycle1+0.2*Cycle2+0.2*Hidden'
     }
 )
-
 # 示例：使用collate_fn生成dataloader
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
                           shuffle=True, collate_fn=collate_fn)
@@ -74,24 +79,10 @@ val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE,
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE,
                          shuffle=False, collate_fn=collate_fn)
 
-
 torch.manual_seed(0)
-
-
-transformer = Seq2SeqTransformer(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
-                                 NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM)
-
-for p in transformer.parameters():
-    if p.dim() > 1:
-        nn.init.xavier_uniform_(p)
-
-transformer = transformer.to(DEVICE)
 
 loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 mse_loss = torch.nn.MSELoss()
-
-optimizer = torch.optim.Adam(
-    transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
 
 
 # helper function to club together sequential operations
@@ -186,17 +177,51 @@ def evaluate(model):
     return losses / len(list(val_loader))
 
 
-best_val_loss = 1e9
-for epoch in range(1, NUM_EPOCHS+1):
-    start_time = timer()
-    train_loss = train_epoch(transformer, optimizer)
+def main():
+    transformer = Seq2SeqTransformer(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
+                                     NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM)
+    for p in transformer.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
 
-    end_time = timer()
-    val_loss = evaluate(transformer)
-    print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
-    wandb.log({'train_loss': train_loss, 'val_loss': val_loss,
-              'epoch_time': end_time - start_time})
-    if val_loss < best_val_loss:
-        torch.save(transformer, os.path.join(
-            wandb.run.dir, f"Epoch{epoch}.pth"))
-        best_val_loss = val_loss
+    optimizer = torch.optim.Adam(
+        transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9
+    )
+    parser = argparse.ArgumentParser(
+        description='Training Script')
+    parser.add_argument('--model_path', type=str, default=None,
+                        help='Path to model for resume training.')
+    args = parser.parse_args()
+
+    if args.model_path and os.path.exists(args.model_path):
+        transformer, optimizer, scalars = load_checkpoint(
+            args.model_path, transformer, optimizer)
+        if 'epoch' in scalars.keys():
+            start_epoch = scalars['epoch']
+        if 'best_val_loss' in scalars.keys():
+            best_val_loss = scalars['best_val_loss']
+    else:
+        start_epoch = 1
+        best_val_loss = 1e9
+
+    transformer = transformer.to(DEVICE)
+
+    for epoch in range(1, NUM_EPOCHS+1):
+        start_time = timer()
+        train_loss = train_epoch(transformer, optimizer)
+
+        end_time = timer()
+        val_loss = evaluate(transformer)
+        print(
+            (f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
+        wandb.log({'train_loss': train_loss, 'val_loss': val_loss,
+                   'epoch_time': end_time - start_time})
+        # Checkpoint save condition
+        if val_loss < best_val_loss:
+            save_checkpoint(transformer, optimizer, epoch, val_loss,
+                            os.path.join(wandb.run.dir, f"Epoch{epoch}.pth"))
+            best_val_loss = val_loss
+
+
+if __name__ == '__main__':
+    main()

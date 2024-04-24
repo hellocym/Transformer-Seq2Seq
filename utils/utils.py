@@ -101,3 +101,35 @@ def LT(x, target_length, sigma=1.0):
     z = z.permute(2, 0, 1)
 
     return z
+
+
+# Save checkpoint
+def save_checkpoint(model, optimizer, epoch, best_val_loss, filepath):
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss
+    }, filepath)
+
+# Function to load checkpoint
+
+
+def load_checkpoint(filepath, model, optimizer):
+    checkpoint = torch.load(filepath)
+    scalars = {}
+    if isinstance(checkpoint, type({})):
+        if 'model_state_dict' in checkpoint.keys():
+            model.load_state_dict(checkpoint['model_state_dict'])
+        if 'optimizer_state_dict' in checkpoint.keys():
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+        if 'epoch' in checkpoint.keys():
+            epoch = checkpoint['epoch']
+            scalars['epoch'] = epoch
+        if 'best_val_loss' in checkpoint.keys():
+            best_val_loss = checkpoint['best_val_loss']
+            scalars['best_val_loss'] = best_val_loss
+    else:
+        model = checkpoint
+    return model, optimizer, scalars
