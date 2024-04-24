@@ -159,6 +159,10 @@ class BinaryClassifier(nn.Module):
         return out
 
 
+optimizer = torch.optim.Adam(
+    transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9
+)
+
 if __name__ == '__main__':
     # 创建数据集实例
     root = '/data/Transformer-Seq2Seq/data_classification/'
@@ -177,9 +181,8 @@ if __name__ == '__main__':
     model = torch.load(
         '/data/Transformer-Seq2Seq/wandb/run-20240423_000758-oldrn0nc/files/Epoch8.pth')
     classification_model = BinaryClassifier(2*HID_LEN*EMB_SIZE, HID_LEN, 1)
-    classification_model.load_state_dict(torch.load(
-        '/data/Transformer-Seq2Seq/checkpoints_classification/model_best.pth'
-    ))
+    classification_model, optimizer, _ = load_checkpoint(
+        args.model_path, classification_model, optimizer)
 
     if torch.cuda.is_available():
         # 将模型移动到 GPU 上
