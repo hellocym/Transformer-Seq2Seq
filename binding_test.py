@@ -159,10 +159,6 @@ class BinaryClassifier(nn.Module):
         return out
 
 
-optimizer = torch.optim.Adam(
-    transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9
-)
-
 if __name__ == '__main__':
     # 创建数据集实例
     root = '/data/Transformer-Seq2Seq/data_classification/'

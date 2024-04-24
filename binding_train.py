@@ -200,8 +200,11 @@ if __name__ == '__main__':
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = Seq2SeqTransformer(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
                                NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM)
-    model.load_state_dict(torch.load(
-        '/data/Transformer-Seq2Seq/wandb/run-20240423_000758-oldrn0nc/files/Epoch8.pth'))
+    optimizer = torch.optim.Adam(
+        transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9
+    )
+    model, optimizer, _ = load_checkpoint(
+        args.model_path, model, optimizer)
 
     # model.encode1()  # HLA
     # model.encode2()  # Peptide
