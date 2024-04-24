@@ -198,9 +198,10 @@ if __name__ == '__main__':
     # Make sure the tokens are in order of their indices to properly insert them in vocab
     special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    model = torch.load(
-        '/data/Transformer-Seq2Seq/wandb/run-20240423_000758-oldrn0nc/files/Epoch8.pth')
+    model = Seq2SeqTransformer(NUM_ENCODER_LAYERS, NUM_DECODER_LAYERS, EMB_SIZE,
+                               NHEAD, SRC_VOCAB_SIZE, TGT_VOCAB_SIZE, FFN_HID_DIM)
+    model.load_state_dict(torch.load(
+        '/data/Transformer-Seq2Seq/wandb/run-20240423_000758-oldrn0nc/files/Epoch8.pth'))
 
     # model.encode1()  # HLA
     # model.encode2()  # Peptide
